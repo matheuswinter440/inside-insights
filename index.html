@@ -30,31 +30,17 @@
       </div>
 
       <div class="controls-row">
-        <div class="controls-left">
-          <label class="attach">
-            📎 Attach screenshot or mockup
-            <input type="file" id="imageInput" accept="image/*" />
-          </label>
-          <span id="imgName" class="ev-more"></span>
-        </div>
-        <div class="controls-left">
-          <select id="model" class="model">
-            <option value="claude-sonnet-5">Claude Sonnet 5 (default)</option>
-            <option value="claude-opus-4-8">Claude Opus 4.8</option>
-            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
-          </select>
-          <button type="submit" class="btn" id="submitBtn">Evaluate</button>
-        </div>
+        <select id="model" class="model">
+          <option value="claude-sonnet-5">Claude Sonnet 5 (default)</option>
+          <option value="claude-opus-4-8">Claude Opus 4.8</option>
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+        </select>
+        <button type="submit" class="btn" id="submitBtn">Evaluate</button>
       </div>
-      <div class="img-preview hidden" id="imgPreview"></div>
     </form>
 
     <div class="status-msg hidden" id="status"></div>
     <div id="result" class="hidden"></div>
-
-    <div style="margin-top:22px;display:flex;justify-content:flex-end">
-      <button type="button" class="btn ghost" id="exportBtn">Export feedback</button>
-    </div>
   </main>
 
   <script src="./assets/app.js"></script>

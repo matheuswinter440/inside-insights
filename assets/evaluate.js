@@ -1,6 +1,5 @@
 /* Avrios Evidence Engine — Evaluate page logic */
 
-let attachedImage = null; // { dataUrl, mediaType, base64 }
 let lastResult = null;    // { id, hypothesis, model, verdict, text }
 
 const els = {};
@@ -8,47 +7,14 @@ document.addEventListener('DOMContentLoaded', () => {
   els.form = document.getElementById('evalForm');
   els.hypothesis = document.getElementById('hypothesis');
   els.model = document.getElementById('model');
-  els.file = document.getElementById('imageInput');
-  els.imgName = document.getElementById('imgName');
-  els.imgPreview = document.getElementById('imgPreview');
   els.submit = document.getElementById('submitBtn');
   els.result = document.getElementById('result');
   els.status = document.getElementById('status');
 
-  els.file.addEventListener('change', onImageSelected);
   els.form.addEventListener('submit', onSubmit);
-
-  const exp = document.getElementById('exportBtn');
-  updateExportCount();
-  exp.onclick = () => {
-    if (Feedback.count() === 0) { showStatus('No feedback logged yet.'); return; }
-    Feedback.export();
-  };
 
   if (!Keys.has()) ensureKey();
 });
-
-/* ---- Image handling ---- */
-function onImageSelected(e) {
-  const file = e.target.files[0];
-  if (!file) { clearImage(); return; }
-  if (!file.type.startsWith('image/')) { showStatus('That file is not an image.', 'error'); clearImage(); return; }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = reader.result;
-    attachedImage = { dataUrl, mediaType: file.type, base64: dataUrl.split(',')[1] };
-    els.imgName.textContent = file.name;
-    els.imgPreview.innerHTML = `<img src="${dataUrl}" alt="attached preview" />
-      <button type="button" class="btn ghost" id="removeImg">Remove</button>`;
-    els.imgPreview.classList.remove('hidden');
-    els.imgPreview.querySelector('#removeImg').onclick = clearImage;
-  };
-  reader.readAsDataURL(file);
-}
-function clearImage() {
-  attachedImage = null; els.file.value = ''; els.imgName.textContent = '';
-  els.imgPreview.classList.add('hidden'); els.imgPreview.innerHTML = '';
-}
 
 /* ---- Submit ---- */
 async function onSubmit(e) {
@@ -66,11 +32,7 @@ async function onSubmit(e) {
   try {
     const system = await buildSystemWithCorpus();
     const model = els.model.value;
-    const userContent = [];
-    if (attachedImage) {
-      userContent.push({ type: 'image', source: { type: 'base64', media_type: attachedImage.mediaType, data: attachedImage.base64 } });
-    }
-    userContent.push({ type: 'text', text: hypothesis });
+    const userContent = [{ type: 'text', text: hypothesis }];
 
     const { text } = await callAnthropic({ model, system, userContent });
     clearStatus();
@@ -241,15 +203,9 @@ function wireFeedback() {
       verdict: lastResult.verdict, vote, note: note.value.trim(), result: lastResult.text,
     });
     saved.classList.remove('hidden');
-    updateExportCount();
     clearTimeout(persist._t);
     persist._t = setTimeout(() => saved.classList.add('hidden'), 1500);
   }
-}
-
-function updateExportCount() {
-  const btn = document.getElementById('exportBtn');
-  if (btn) btn.textContent = `Export feedback (${Feedback.count()})`;
 }
 
 function escapeHtml(s) {
