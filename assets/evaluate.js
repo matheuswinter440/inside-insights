@@ -77,12 +77,16 @@ async function onSubmit(e) {
       model: els.model.value,
       system,
       userContent: [{ type: 'text', text: hypothesis }],
-      maxTokens: 2000,
+      maxTokens: 4096,
+      thinking: { type: 'disabled' }, // classification task; keeps the JSON budget intact + reduces variance
       outputConfig: { format: { type: 'json_schema', schema: RESULT_SCHEMA } },
     });
 
     const parsed = safeParse(text);
-    if (!parsed) throw new Error('The model returned an unparseable result. Try again.');
+    if (!parsed) {
+      console.error('Unparseable model output:', text);
+      throw new Error('The model returned an unparseable result. Try again — if it persists, switch model or reload.');
+    }
 
     // Map each labelled index back to the real corpus card (never the model's text).
     const supporting = [], contradicting = [];
@@ -110,8 +114,10 @@ async function onSubmit(e) {
 }
 
 function safeParse(text) {
-  try { return JSON.parse(text); } catch {}
-  const m = text && text.match(/\{[\s\S]*\}/);
+  if (!text) return null;
+  let t = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  try { return JSON.parse(t); } catch {}
+  const m = t.match(/\{[\s\S]*\}/);
   if (m) { try { return JSON.parse(m[0]); } catch {} }
   return null;
 }

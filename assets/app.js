@@ -162,7 +162,7 @@ async function buildSystemWithCandidates(candidates) {
    ============================================================ */
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
-async function callAnthropic({ model, system, userContent, maxTokens = 2000, outputConfig = null }) {
+async function callAnthropic({ model, system, userContent, maxTokens = 2000, outputConfig = null, thinking = null }) {
   const key = Keys.get();
   if (!key) throw new Error('NO_KEY');
 
@@ -173,6 +173,7 @@ async function callAnthropic({ model, system, userContent, maxTokens = 2000, out
     messages: [{ role: 'user', content: userContent }],
   };
   if (outputConfig) body.output_config = outputConfig;
+  if (thinking) body.thinking = thinking;
 
   let res;
   try {
