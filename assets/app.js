@@ -115,7 +115,7 @@ let _systemPromptCache = null;
 
 async function loadCorpusRaw() {
   if (_corpusRawCache !== null) return _corpusRawCache;
-  const res = await fetch('./data/corpus_all.csv');
+  const res = await fetch('./data/corpus_all.csv?v=3');
   if (!res.ok) throw new Error(`Could not load corpus (${res.status}). If viewing locally, serve over http (see README).`);
   _corpusRawCache = await res.text();
   return _corpusRawCache;
@@ -129,7 +129,7 @@ async function loadCorpusRows() {
 
 async function loadSystemPrompt() {
   if (_systemPromptCache !== null) return _systemPromptCache;
-  const res = await fetch('./data/system-prompt.txt');
+  const res = await fetch('./data/system-prompt.txt?v=3');
   if (!res.ok) throw new Error(`Could not load system prompt (${res.status}).`);
   _systemPromptCache = await res.text();
   return _systemPromptCache;
