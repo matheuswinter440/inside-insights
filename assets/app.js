@@ -135,16 +135,26 @@ async function loadSystemPrompt() {
   return _systemPromptCache;
 }
 
-/* Build system = prompt with the full corpus appended after "=== CORPUS ===".
-   The committed prompt contains a placeholder line; we replace it with the CSV
-   text so the file stays verbatim/editable but the model gets real cards. */
-async function buildSystemWithCorpus() {
-  const [prompt, csv] = await Promise.all([loadSystemPrompt(), loadCorpusRaw()]);
+/* Build system = prompt with the deterministically-retrieved CANDIDATE cards
+   appended (numbered 1..N). The model classifies this fixed set — it no longer
+   chooses which cards are relevant, so the same query always evaluates against
+   the same evidence. The committed prompt carries a placeholder line we replace. */
+function candidatesToText(candidates) {
+  return candidates.map((c, i) => {
+    const r = c.row;
+    const desc = (r.Description || '').trim();
+    return `[${i + 1}] "${(r.Insight || '').trim()}" — Source: ${r.Source || 'Unknown'}; Date: ${r.Date || 'Unknown'}; Segment: ${r.Segment || 'Unknown'}`
+      + (desc ? `\n     Context: ${desc}` : '');
+  }).join('\n');
+}
+
+async function buildSystemWithCandidates(candidates) {
+  const prompt = await loadSystemPrompt();
+  const block = candidates.length ? candidatesToText(candidates) : '(no candidate cards were retrieved for this hypothesis)';
   const placeholder = '{the app appends the full contents of corpus_all.csv here at runtime}';
-  if (prompt.includes(placeholder)) return prompt.replace(placeholder, csv.trim());
-  // Fallback: append if the marker/placeholder isn't present.
-  if (prompt.includes('=== CORPUS ===')) return prompt.trimEnd() + '\n' + csv.trim() + '\n';
-  return prompt.trimEnd() + '\n\n=== CORPUS ===\n' + csv.trim() + '\n';
+  if (prompt.includes(placeholder)) return prompt.replace(placeholder, block);
+  if (prompt.includes('=== CANDIDATE CARDS ===')) return prompt.trimEnd() + '\n' + block + '\n';
+  return prompt.trimEnd() + '\n\n=== CANDIDATE CARDS ===\n' + block + '\n';
 }
 
 /* ============================================================
@@ -152,9 +162,17 @@ async function buildSystemWithCorpus() {
    ============================================================ */
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
-async function callAnthropic({ model, system, userContent, maxTokens = 1500 }) {
+async function callAnthropic({ model, system, userContent, maxTokens = 2000, outputConfig = null }) {
   const key = Keys.get();
   if (!key) throw new Error('NO_KEY');
+
+  const body = {
+    model,
+    max_tokens: maxTokens,
+    system,
+    messages: [{ role: 'user', content: userContent }],
+  };
+  if (outputConfig) body.output_config = outputConfig;
 
   let res;
   try {
@@ -166,12 +184,7 @@ async function callAnthropic({ model, system, userContent, maxTokens = 1500 }) {
         'anthropic-dangerous-direct-browser-access': 'true',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        system,
-        messages: [{ role: 'user', content: userContent }],
-      }),
+      body: JSON.stringify(body),
     });
   } catch (netErr) {
     throw new Error(`Network/CORS error: ${netErr.message}`);

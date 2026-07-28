@@ -96,10 +96,33 @@ color the badge.
 
 ## How it works
 
-**Evaluate:** `system` = `system-prompt.txt` with the full corpus appended → one user message
-(hypothesis text, plus an image block if a screenshot was attached) → Anthropic Messages API.
-Model defaults to `claude-sonnet-5`; switch to `claude-opus-4-8` for higher quality. Errors are
-handled: `401` re-prompts for the key, `429` shows a rate-limit message, network/CORS errors show raw.
+**Evaluate:** retrieval is **deterministic and done in the app**, not by the model — so the same
+hypothesis references the same cards every time (fixing the earlier behavior where the model, asked
+to retrieve in-context over ~270 cards, would sometimes return a different subset or even GAP on a
+supported query).
+
+1. `assets/retrieve.js` scores every corpus card against the hypothesis using IDF-weighted term
+   overlap with light stemming + a fleet-domain synonym map (so "fuel" also matches
+   "consumption"/"diesel", "report" also matches "reporting"/"export"/"dashboard"). Same query →
+   same candidate set, ranked strongest-first. Ubiquitous terms ("fleet", "vehicle") carry no
+   weight so they don't drag the whole corpus in. Top 40 are sent to the model (surfaced in the UI
+   when the match count exceeds that).
+2. `system` = `system-prompt.txt` with **only those candidates** appended (numbered). The model's
+   job shrinks to classifying each candidate as supporting / contradicting / irrelevant and picking
+   a verdict — it returns **structured JSON** (`output_config.format`), so there's no fragile text
+   parsing. Card text/source/date shown always come from the corpus (by index), never the model.
+3. The **strength score is computed in the app** from the supporting labels (distinct cards ×
+   distinct source types, with a recency downgrade), so it's auditable and stable.
+
+Model defaults to `claude-sonnet-5`; `claude-opus-4-8` and `claude-haiku-4-5` are also available
+(all three support structured outputs). Errors are handled: `401` re-prompts for the key, `429`
+shows a rate-limit message, network/CORS errors show raw.
+
+> **Known limit / upgrade path:** lexical retrieval matches on words, so it can miss pure
+> paraphrases with no shared vocabulary. The build-spec-anticipated upgrade is embedding-based
+> retrieval (e.g. Voyage AI): precompute a card embedding once, embed the query at runtime, select
+> by cosine similarity. Same deterministic contract, better semantic recall — at the cost of an
+> embeddings key + a precompute step.
 
 > Verify current model strings against the docs before shipping:
 > https://docs.claude.com/en/docs/about-claude/models
