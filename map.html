@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Avrios Evidence Engine — Opportunity map</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./assets/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <span class="brand"><span class="dot"></span> Evidence Engine</span>
+      <nav class="nav">
+        <a href="./index.html">Evaluate</a>
+        <a href="./map.html" class="active">Opportunity map</a>
+      </nav>
+      <span class="topbar-spacer"></span>
+      <span class="key-status" id="keyStatus"></span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Opportunity map</h1>
+    <p class="subtitle">The whole corpus clustered into themes. Bar length = demand volume (card count).
+      Color = evidence breadth: <span style="color:var(--teal)">teal = triangulated (≥2 source types)</span>,
+      <span style="color:var(--amber)">amber = single-source</span>.</p>
+
+    <div class="stat-row" id="stats"></div>
+
+    <div class="map-toolbar">
+      <div class="ctl">
+        <label for="sourceFilter">Filter by source type</label>
+        <select id="sourceFilter"></select>
+      </div>
+      <div class="ctl">
+        <label for="sortToggle">Sort by</label>
+        <select id="sortToggle">
+          <option value="volume">Demand volume</option>
+          <option value="breadth">Source-type breadth</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="sw" style="background:#12b5a6"></span>Triangulated (≥2 source types)</span>
+      <span><span class="sw" style="background:#f5a524"></span>Single-source</span>
+      <span>Each label shows its distinct source-type count, so meaning isn't color-only.</span>
+    </div>
+
+    <div class="status-msg hidden" id="mapStatus"></div>
+
+    <div class="panel chart-box" id="chartBox" style="height:520px">
+      <canvas id="themeChart"></canvas>
+    </div>
+
+    <p class="caveats">
+      <strong>Read this before treating it as a roadmap.</strong>
+      Volume ≠ value — this axis counts how often something came up, not how much it's worth;
+      the value axis arrives once behavioral data is wired in. Clustering is <strong>heuristic
+      keyword matching</strong> (first-match-wins rules), not embeddings — a card lands in one
+      theme even if it touches several, and wording quirks can misfile it. “Other” is a catch-all
+      for cards no rule matched. Click any bar to audit the underlying cards.
+    </p>
+
+    <div id="drill"></div>
+  </main>
+
+  <script src="./assets/app.js"></script>
+  <script src="./assets/map.js"></script>
+</body>
+</html>
