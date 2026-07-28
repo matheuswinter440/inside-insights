@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   els.hypothesis = document.getElementById('hypothesis');
   els.model = document.getElementById('model');
   els.file = document.getElementById('imageInput');
+  els.imgName = document.getElementById('imgName');
   els.imgPreview = document.getElementById('imgPreview');
   els.submit = document.getElementById('submitBtn');
   els.result = document.getElementById('result');
@@ -17,7 +18,13 @@ document.addEventListener('DOMContentLoaded', () => {
   els.file.addEventListener('change', onImageSelected);
   els.form.addEventListener('submit', onSubmit);
 
-  // Prompt for a key up front if none stored (non-blocking).
+  const exp = document.getElementById('exportBtn');
+  updateExportCount();
+  exp.onclick = () => {
+    if (Feedback.count() === 0) { showStatus('No feedback logged yet.'); return; }
+    Feedback.export();
+  };
+
   if (!Keys.has()) ensureKey();
 });
 
@@ -25,28 +32,25 @@ document.addEventListener('DOMContentLoaded', () => {
 function onImageSelected(e) {
   const file = e.target.files[0];
   if (!file) { clearImage(); return; }
-  if (!file.type.startsWith('image/')) {
-    showStatus('That file is not an image.', 'error');
-    clearImage(); return;
-  }
+  if (!file.type.startsWith('image/')) { showStatus('That file is not an image.', 'error'); clearImage(); return; }
   const reader = new FileReader();
   reader.onload = () => {
     const dataUrl = reader.result;
-    const base64 = dataUrl.split(',')[1];
-    attachedImage = { dataUrl, mediaType: file.type, base64 };
-    els.imgPreview.innerHTML = `<img src="${dataUrl}" alt="attached image preview" />
-      <button type="button" class="btn secondary" id="removeImg">remove</button>`;
+    attachedImage = { dataUrl, mediaType: file.type, base64: dataUrl.split(',')[1] };
+    els.imgName.textContent = file.name;
+    els.imgPreview.innerHTML = `<img src="${dataUrl}" alt="attached preview" />
+      <button type="button" class="btn ghost" id="removeImg">Remove</button>`;
+    els.imgPreview.classList.remove('hidden');
     els.imgPreview.querySelector('#removeImg').onclick = clearImage;
   };
   reader.readAsDataURL(file);
 }
 function clearImage() {
-  attachedImage = null;
-  els.file.value = '';
-  els.imgPreview.innerHTML = '';
+  attachedImage = null; els.file.value = ''; els.imgName.textContent = '';
+  els.imgPreview.classList.add('hidden'); els.imgPreview.innerHTML = '';
 }
 
-/* ---- Submit / evaluate ---- */
+/* ---- Submit ---- */
 async function onSubmit(e) {
   e.preventDefault();
   const hypothesis = els.hypothesis.value.trim();
@@ -62,13 +66,9 @@ async function onSubmit(e) {
   try {
     const system = await buildSystemWithCorpus();
     const model = els.model.value;
-
     const userContent = [];
     if (attachedImage) {
-      userContent.push({
-        type: 'image',
-        source: { type: 'base64', media_type: attachedImage.mediaType, data: attachedImage.base64 },
-      });
+      userContent.push({ type: 'image', source: { type: 'base64', media_type: attachedImage.mediaType, data: attachedImage.base64 } });
     }
     userContent.push({ type: 'text', text: hypothesis });
 
@@ -83,69 +83,141 @@ async function onSubmit(e) {
   }
 }
 
-function setLoading(on) {
-  els.submit.disabled = on;
-  els.submit.textContent = on ? 'Evaluating…' : 'Evaluate';
-}
-function showStatus(html, cls = '') {
-  els.status.className = 'status-msg' + (cls ? ' ' + cls : '');
-  els.status.innerHTML = html;
-  els.status.classList.remove('hidden');
-}
+function setLoading(on) { els.submit.disabled = on; els.submit.textContent = on ? 'Evaluating…' : 'Evaluate'; }
+function showStatus(html, cls = '') { els.status.className = 'status-msg' + (cls ? ' ' + cls : ''); els.status.innerHTML = html; els.status.classList.remove('hidden'); }
 function clearStatus() { els.status.classList.add('hidden'); els.status.innerHTML = ''; }
 
-/* ---- Render structured result (verbatim body + parsed header for the badge) ---- */
-function parseVerdict(text) {
-  const m = text.match(/Verdict:\s*(SUPPORTED|CONTRADICTED|PARTIAL|GAP)/i);
-  return m ? m[1].toUpperCase() : null;
-}
-function parseStrengthLine(text) {
-  const m = text.match(/Strength:\s*(.+)/i);
-  return m ? m[1].trim() : null;
+/* ============================================================
+   Parse the fixed-format model output into structured fields.
+   Format (from system-prompt.txt):
+     Verdict / Strength / Evidence / Contradicts / Recommendation
+   ============================================================ */
+const LABELS = ['Verdict', 'Strength', 'Evidence', 'Contradicts', 'Recommendation'];
+
+function parseResult(text) {
+  const pos = {};
+  LABELS.forEach(l => { const m = text.match(new RegExp('^[ \\t>*-]*' + l + '\\s*:', 'mi')); if (m) pos[l] = m.index; });
+
+  function section(l) {
+    if (pos[l] == null) return null;
+    let body = text.slice(pos[l]).replace(new RegExp('^[ \\t>*-]*' + l + '\\s*:', 'i'), '');
+    let cut = body.length;
+    LABELS.forEach(o => {
+      if (o === l) return;
+      const m = body.match(new RegExp('\\n[ \\t>*-]*' + o + '\\s*:', 'i'));
+      if (m && m.index < cut) cut = m.index;
+    });
+    return body.slice(0, cut).trim();
+  }
+
+  const verdictRaw = section('Verdict') || '';
+  const vm = verdictRaw.match(/SUPPORTED|CONTRADICTED|PARTIAL|GAP/i);
+  const verdict = vm ? vm[0].toUpperCase() : 'GAP';
+
+  const strengthRaw = section('Strength') || '';
+  const sm = strengthRaw.match(/(\d+)\s*\/\s*3/);
+  const score = sm ? Math.max(0, Math.min(3, parseInt(sm[1], 10))) : (verdict === 'GAP' ? 0 : 1);
+  // label word after the score, e.g. "2/3 Moderate — ..."
+  const lw = strengthRaw.replace(/^\s*\d+\s*\/\s*3\s*/, '').match(/^([A-Za-z][A-Za-z ()]*?)(?=[—\-–;]|$)/);
+  const scoreWord = lw ? lw[1].trim() : '';
+  // detail = everything after the first dash separator
+  const dashIdx = strengthRaw.search(/[—–]|\s-\s/);
+  const strengthDetail = dashIdx >= 0 ? strengthRaw.slice(dashIdx).replace(/^[—–\- ]+/, '').trim() : strengthRaw.trim();
+
+  const evidence = splitCards(section('Evidence'));
+  const contradicts = splitCards(section('Contradicts'));
+  const recommendation = section('Recommendation') || '';
+
+  return { verdict, score, scoreWord, strengthDetail, evidence, contradicts, recommendation };
 }
 
+/* Split an Evidence/Contradicts block into card objects {text, meta, more}. */
+function splitCards(block) {
+  if (!block) return [];
+  return block.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+    line = line.replace(/^[•\-*–—\d.)\s]+/, '').trim();
+    const more = /^\+\s*\d+\s+more/i.test(line);
+    if (more) return { more: line };
+    // Split "insight" — Source, Date  →  text + meta
+    const m = line.match(/^(.*?)(?:\s+[—–]\s+|\s+-\s+)(.+)$/);
+    if (m) return { text: stripQuotes(m[1]), meta: m[2].trim() };
+    return { text: stripQuotes(line), meta: '' };
+  });
+}
+function stripQuotes(s) { return s.replace(/^["“”']+|["“”']+$/g, '').trim(); }
+
+/* ---- Render ---- */
 function renderResult({ hypothesis, model, text }) {
-  const verdict = parseVerdict(text);
-  const strength = parseStrengthLine(text);
+  const p = parseResult(text);
   const id = 'r_' + Date.now();
-  lastResult = { id, hypothesis, model, verdict, text };
+  lastResult = { id, hypothesis, model, verdict: p.verdict, text };
 
-  const badgeClass = (verdict || 'gap').toLowerCase();
-  const strengthPill = strength ? `<span class="strength-pill">${escapeHtml(strength)}</span>` : '';
+  const vClass = p.verdict.toLowerCase();
+  const vLabel = { SUPPORTED: 'Supported', CONTRADICTED: 'Contradicted', PARTIAL: 'Partially supported', GAP: 'Evidence gap' }[p.verdict];
+  const pct = Math.round((p.score / 3) * 100);
+
+  const metaBits = [];
+  if (p.strengthDetail) metaBits.push(escapeHtml(p.strengthDetail));
+  if (p.contradicts.filter(c => !c.more).length) metaBits.push(p.contradicts.filter(c => !c.more).length + ' contradiction' + (p.contradicts.filter(c => !c.more).length > 1 ? 's' : ''));
+  const metaLine = metaBits.join(' · ');
+
+  const contraHtml = p.contradicts.length ? `
+    <div class="ev-col contra">
+      <h3>Contradicting evidence</h3>
+      ${cardsHtml(p.contradicts)}
+    </div>` : '';
+
+  const evidenceHtml = p.evidence.length ? `
+    <div class="ev-col support">
+      <h3>Supporting evidence</h3>
+      ${cardsHtml(p.evidence)}
+    </div>` : `
+    <div class="ev-col support">
+      <h3>Supporting evidence</h3>
+      <p class="ev-empty">No cards in the corpus directly support this — see the recommendation.</p>
+    </div>`;
 
   els.result.innerHTML = `
-    <div class="panel">
-      <div class="verdict-header">
-        ${verdict ? `<span class="badge ${badgeClass}">${verdict}</span>` : ''}
-        ${strengthPill}
+    <div class="verdict-block result-card">
+      <div class="verdict-top">
+        <span class="badge ${vClass}">${vLabel}</span>
+        ${metaLine ? `<span class="verdict-meta">${metaLine}</span>` : ''}
       </div>
-      <div class="result-body">${formatBody(text)}</div>
+      <div class="strength">
+        <div class="row"><span>Strength score</span><span class="val">${p.score} / 3${p.scoreWord ? ' · ' + escapeHtml(p.scoreWord) : ''}</span></div>
+        <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+      </div>
+      ${p.recommendation ? `<p class="summary"><span class="lead">Recommendation.</span> ${escapeHtml(p.recommendation)}</p>` : ''}
+    </div>
+
+    <div class="evidence-grid result-card">
+      ${evidenceHtml}
+      ${contraHtml}
+    </div>
+
+    <div class="verdict-block result-card">
       <div class="feedback" id="feedback">
-        <span style="font-size:13px;color:var(--text-dim)">Was this right?</span>
-        <button class="fb-btn" data-v="up" title="helpful">👍</button>
-        <button class="fb-btn" data-v="down" title="not helpful">👎</button>
-        <input type="text" id="fbNote" placeholder="optional note…" />
-        <span class="saved-note hidden" id="fbSaved">saved ✓</span>
+        <span>Was this verdict useful?</span>
+        <button class="fb" data-v="up">Yes</button>
+        <button class="fb" data-v="down">No</button>
+        <input class="note" id="fbNote" type="text" placeholder="optional note — what did it miss?" />
+        <span class="saved hidden" id="fbSaved">saved ✓</span>
       </div>
     </div>`;
+
   els.result.classList.remove('hidden');
   els.result.scrollIntoView({ behavior: 'smooth', block: 'start' });
   wireFeedback();
 }
 
-/* Bold the leading labels; keep the rest verbatim. */
-function formatBody(text) {
-  const labels = ['Verdict', 'Strength', 'Evidence', 'Contradicts', 'Recommendation'];
-  return escapeHtml(text)
-    .split('\n')
-    .map(line => {
-      for (const lbl of labels) {
-        const re = new RegExp('^(' + lbl + '):');
-        if (re.test(line)) return line.replace(re, '<strong>$1:</strong>');
-      }
-      return line;
-    })
-    .join('\n');
+function cardsHtml(cards) {
+  return cards.map(c => {
+    if (c.more) return `<div class="ev-more">${escapeHtml(c.more)}</div>`;
+    return `<div class="ev-item">
+      ${c.meta ? `<div class="m">${escapeHtml(c.meta)}</div>` : ''}
+      <div class="t">${escapeHtml(c.text)}</div>
+    </div>`;
+  }).join('');
 }
 
 function wireFeedback() {
@@ -153,27 +225,20 @@ function wireFeedback() {
   const note = document.getElementById('fbNote');
   const saved = document.getElementById('fbSaved');
   let vote = null;
-
-  fb.querySelectorAll('.fb-btn').forEach(btn => {
+  fb.querySelectorAll('.fb').forEach(btn => {
     btn.onclick = () => {
       vote = btn.dataset.v;
-      fb.querySelectorAll('.fb-btn').forEach(b => b.classList.remove('active-up', 'active-down'));
-      btn.classList.add(vote === 'up' ? 'active-up' : 'active-down');
+      fb.querySelectorAll('.fb').forEach(b => b.classList.remove('on-yes', 'on-no'));
+      btn.classList.add(vote === 'up' ? 'on-yes' : 'on-no');
       persist();
     };
   });
   note.addEventListener('input', () => { if (vote) persist(); });
-
   function persist() {
     Feedback.upsert({
-      id: lastResult.id,
-      timestamp: new Date().toISOString(),
-      hypothesis: lastResult.hypothesis,
-      model: lastResult.model,
-      verdict: lastResult.verdict,
-      vote,
-      note: note.value.trim(),
-      result: lastResult.text,
+      id: lastResult.id, timestamp: new Date().toISOString(),
+      hypothesis: lastResult.hypothesis, model: lastResult.model,
+      verdict: lastResult.verdict, vote, note: note.value.trim(), result: lastResult.text,
     });
     saved.classList.remove('hidden');
     updateExportCount();
@@ -188,17 +253,5 @@ function updateExportCount() {
 }
 
 function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
-
-/* Export button wiring (in the toolbar). */
-document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('exportBtn');
-  if (btn) {
-    updateExportCount();
-    btn.onclick = () => {
-      if (Feedback.count() === 0) { showStatus('No feedback logged yet.', ''); return; }
-      Feedback.export();
-    };
-  }
-});

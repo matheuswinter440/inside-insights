@@ -3,56 +3,58 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Avrios Evidence Engine — Evaluate</title>
+  <title>Evidence Engine — Evaluate a hypothesis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./assets/styles.css" />
 </head>
 <body>
   <header class="topbar">
-    <div class="topbar-inner">
-      <span class="brand"><span class="dot"></span> Evidence Engine</span>
-      <nav class="nav">
-        <a href="./index.html" class="active">Evaluate</a>
-        <a href="./map.html">Opportunity map</a>
-      </nav>
-      <span class="topbar-spacer"></span>
-      <span class="key-status" id="keyStatus"></span>
-    </div>
+    <span class="brand"><span class="dot"></span> Evidence Engine</span>
+    <nav class="nav">
+      <a href="./index.html" class="active">Evaluate a hypothesis</a>
+      <a href="./map.html">Opportunity map</a>
+    </nav>
+    <span class="key-status" id="keyStatus"></span>
   </header>
 
   <main class="wrap">
     <h1>Evaluate a hypothesis</h1>
-    <p class="subtitle">Check a product, feature, or copy hypothesis against 270+ de-identified
-      user-research insight cards. You get a verdict, an auditable strength score, and cited evidence —
-      including anything that contradicts.</p>
+    <p class="subtitle">It will be run against our database of insights from user interviews and Planhat issues.</p>
 
     <form class="panel" id="evalForm">
-      <label class="field-label" for="hypothesis">Hypothesis</label>
-      <textarea id="hypothesis" placeholder="e.g. Fleet managers want AI to automatically close low-risk tasks without confirmation."></textarea>
-
-      <div class="file-row">
-        <label for="imageInput" class="field-label" style="margin:0">Optional screenshot / mockup</label>
-        <input type="file" id="imageInput" accept="image/*" />
+      <div class="field">
+        <label class="field-label" for="hypothesis">Hypothesis</label>
+        <textarea id="hypothesis" rows="6" placeholder="e.g. Fleet managers want AI to automatically close low-risk tasks without confirmation."></textarea>
       </div>
-      <div class="img-preview" id="imgPreview"></div>
 
       <div class="controls-row">
-        <button type="submit" class="btn" id="submitBtn">Evaluate</button>
-        <span class="model-select">
-          <label for="model">Model</label>
-          <select id="model">
+        <div class="controls-left">
+          <label class="attach">
+            📎 Attach screenshot or mockup
+            <input type="file" id="imageInput" accept="image/*" />
+          </label>
+          <span id="imgName" class="ev-more"></span>
+        </div>
+        <div class="controls-left">
+          <select id="model" class="model">
             <option value="claude-sonnet-5">Claude Sonnet 5 (default)</option>
-            <option value="claude-opus-4-8">Claude Opus 4.8 (higher quality)</option>
+            <option value="claude-opus-4-8">Claude Opus 4.8</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
           </select>
-        </span>
-        <span class="topbar-spacer"></span>
-        <button type="button" class="btn secondary" id="exportBtn">Export feedback</button>
+          <button type="submit" class="btn" id="submitBtn">Evaluate</button>
+        </div>
       </div>
+      <div class="img-preview hidden" id="imgPreview"></div>
     </form>
 
     <div class="status-msg hidden" id="status"></div>
     <div id="result" class="hidden"></div>
+
+    <div style="margin-top:22px;display:flex;justify-content:flex-end">
+      <button type="button" class="btn ghost" id="exportBtn">Export feedback</button>
+    </div>
   </main>
 
   <script src="./assets/app.js"></script>

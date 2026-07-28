@@ -109,8 +109,29 @@ handled: `401` re-prompts for the key, `429` shows a rate-limit message, network
 
 **Opportunity map:** each card is assigned to a theme client-side using first-match-wins keyword
 rules. Per theme we compute card count, distinct source types, and distinct non-"Unknown" segments,
-then render a horizontal Chart.js bar chart. Filter by source type, toggle sort
-(volume ↔ source-type breadth), click a bar to list that theme's cards.
+then render a **packed-bubble chart** (custom, no chart library): bubble size = demand volume (card
+count), bubble color = source density (distinct source types, 1 → 4+). Click a bubble to open that
+theme's insight cards. Bubbles are packed on an Archimedean spiral entirely client-side.
+
+## Design system
+
+The UI follows the "Evidence Engine" Claude Design project (Vimcar / Shiftmove dark theme):
+
+- **Display face:** Pangea (licensed). The `.otf` files couldn't be committed here, so the stack
+  falls back to **Hanken Grotesk** — the substitute named in the design system's own typography
+  tokens — loaded from Google Fonts. To use the real Pangea, drop `Pangea-Regular.otf` /
+  `Pangea-SemiBold.otf` into `assets/fonts/`, add a `@font-face` for each, and `Pangea` (already
+  first in the `--font-display` stack in `styles.css`) will win automatically.
+- **Body face:** Inter (Google Fonts).
+- Dark-only theme, matching the design. Palette tokens live at the top of `assets/styles.css`.
+
+> **Note vs. the design mockup:** the model dropdown labels were mapped to real, current model
+> IDs (`claude-sonnet-5`, `claude-opus-4-8`, `claude-haiku-4-5-20251001`) — the mockup's
+> "Opus 4.6" isn't a shipping model. The map's "volume ≠ value" and "heuristic clustering"
+> caveats are kept visible (a build-spec non-negotiable) even though the mockup omitted them.
+> The evaluate result parses the system prompt's fixed output format (Verdict / Strength /
+> Evidence / Contradicts / Recommendation) into the two-column layout; the system prompt itself
+> is unchanged.
 
 ### Caveats surfaced in the UI (kept on purpose)
 - **Volume ≠ value** — the bar axis counts frequency, not worth.
