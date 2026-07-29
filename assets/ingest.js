@@ -80,12 +80,14 @@ function renderVoiceHint() {
 }
 
 function renderSizeHint() {
-  const n = els.transcript.value.length;
-  if (!n) { els.sizeHint.textContent = ''; return; }
-  const chunks = Math.ceil(n / CHUNK_CHARS);
-  els.sizeHint.textContent = chunks > 1
-    ? `${n.toLocaleString()} characters — will be extracted in ${chunks} passes`
-    : `${n.toLocaleString()} characters`;
+  const value = els.transcript.value;
+  if (!value.length) { els.sizeHint.textContent = ''; return; }
+  // Count the real split rather than dividing by the limit: chunkText breaks on
+  // blank lines, so the arithmetic answer is often off by one.
+  const passes = chunkText(value, CHUNK_CHARS).length;
+  els.sizeHint.textContent = passes > 1
+    ? `${value.length.toLocaleString()} characters — will be extracted in ${passes} passes`
+    : `${value.length.toLocaleString()} characters`;
 }
 
 /* ============================================================
@@ -111,19 +113,32 @@ async function onExtract(e) {
     const meta = currentMeta();
     const chunks = chunkText(transcript, CHUNK_CHARS);
     const extracted = [];
+    let failure = null;
+    let done = 0;
 
     for (let i = 0; i < chunks.length; i++) {
       showStatus(chunks.length > 1
         ? `<span class="spinner"></span>Extracting cards — pass ${i + 1} of ${chunks.length}…`
         : '<span class="spinner"></span>Extracting cards…');
 
-      const res = await callWorker('/api/extract', {
-        model: els.model.value,
-        transcript: chunks[i],
-        meta,
-      });
-      extracted.push(...(res.cards || []));
+      try {
+        const res = await callWorker('/api/extract', {
+          model: els.model.value,
+          transcript: chunks[i],
+          meta,
+        });
+        extracted.push(...(res.cards || []));
+        done++;
+      } catch (err) {
+        // Don't throw away completed passes. A long transcript is minutes of
+        // model time, and a transient 429 partway through shouldn't cost all of
+        // it — surface what we have and say plainly what's missing.
+        failure = err;
+        break;
+      }
     }
+
+    if (failure && !extracted.length) throw failure;
 
     if (!extracted.length) {
       clearStatus();
@@ -137,6 +152,14 @@ async function onExtract(e) {
     reviewCards = annotate(dedupeWithinRun(extracted), meta);
     clearStatus();
     renderReview(meta);
+
+    if (failure) {
+      showStatus(`Pass ${done + 1} of ${chunks.length} failed: `
+        + `${escapeHtml(failure.message || String(failure))} — the cards below come from the `
+        + `first ${done} pass${done !== 1 ? 'es' : ''} only. Add them, then re-run with the `
+        + `remaining material.`, 'error');
+      if (failure.code === 401) ensureKey({ force: true });
+    }
   } catch (err) {
     if (err.code === 401) { showStatus(err.message, 'error'); ensureKey({ force: true }); }
     else showStatus(err.message || String(err), 'error');
@@ -414,6 +437,9 @@ async function commit(meta) {
     els.review.querySelector('#reviewRows').innerHTML =
       '<p class="ev-empty">Committed. Paste more material above to add another batch.</p>';
     els.review.querySelector('#discardBtn').textContent = 'Clear';
+    // Clear the "N of M selected" label — it would otherwise still describe the
+    // batch that just left.
+    els.review.querySelector('#commitCount').textContent = '';
   } catch (err) {
     btn.disabled = false;
     if (err.code === 401) { show(err.message, 'error'); ensureKey({ force: true }); }
