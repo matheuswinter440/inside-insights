@@ -89,6 +89,11 @@ password when the Worker returns 401.
 ## Operational notes
 
 - **Free tier**: 100k requests/day, which this comfortably fits inside.
+- **Prompt edits take up to a minute.** The prompts are cached per isolate for 60s and
+  fetched with `cache: 'no-cache'` so the edge cache can't extend that. Editing
+  `data/extraction-prompt.txt`, committing, and waiting for the Pages build is enough — no
+  redeploy. If the site is unreachable or returns an error on refresh, the Worker keeps serving the
+  last good copy rather than failing requests; only a cold isolate with an unreachable site 502s.
 - **The corpus uses CRLF line endings.** The append path writes `\r\n` to match.
   Switching to `\n` would leave the file mixed-terminator and make every
   subsequent diff noisy. `tools/migrate-segments.py` sniffs and preserves it too.

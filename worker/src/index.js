@@ -181,18 +181,42 @@ function fail(message, status) {
 
 /* ============================================================
    Prompt loading — from the site, so /data stays the source of truth
+   ------------------------------------------------------------
+   Cached per isolate, but only briefly. Editing a prompt is meant to be a commit
+   rather than a redeploy (the README says so), and an unbounded cache would make
+   that a lie: a Worker isolate can live a long time, so a stale prompt could be
+   served well after the commit landed. One minute keeps the hot path fast while
+   bounding how wrong it can be.
    ============================================================ */
-const promptCache = new Map();
+const promptCache = new Map();   // name -> { text, at }
+const PROMPT_TTL_MS = 60_000;
 
 async function loadPrompt(name, env) {
-  if (promptCache.has(name)) return promptCache.get(name);
+  const hit = promptCache.get(name);
+  if (hit && Date.now() - hit.at < PROMPT_TTL_MS) return hit.text;
+
   const base = (env.SITE_BASE_URL || '').replace(/\/$/, '');
   if (!base) throw fail('SITE_BASE_URL is not configured on the Worker.', 500);
 
-  const res = await fetch(`${base}/data/${name}`);
-  if (!res.ok) throw fail(`Could not load ${name} from the site (${res.status}).`, 502);
+  let res;
+  try {
+    // `cache: 'no-cache'` revalidates instead of serving Cloudflare's own cached
+    // copy — without it the edge cache would defeat the TTL above.
+    res = await fetch(`${base}/data/${name}`, { cache: 'no-cache' });
+  } catch (err) {
+    if (hit) return hit.text;   // network blip: keep working on the last good copy
+    throw fail(`Could not reach the site to load ${name}: ${err.message}`, 502);
+  }
+
+  if (!res.ok) {
+    // A bad deploy shouldn't take the endpoints down when we already have a
+    // usable prompt — serve the stale one rather than failing the request.
+    if (hit) return hit.text;
+    throw fail(`Could not load ${name} from the site (${res.status}).`, 502);
+  }
+
   const text = await res.text();
-  promptCache.set(name, text);
+  promptCache.set(name, { text, at: Date.now() });
   return text;
 }
 

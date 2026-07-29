@@ -1,0 +1,18 @@
+# Copy to `worker/.dev.vars` for a fully offline `wrangler dev`.
+#
+#     cp .dev.vars.example .dev.vars
+#
+# .dev.vars is gitignored. Never commit real values — the example file is the
+# only one that belongs in the repo.
+#
+# When you're logged in via `wrangler login`, `wrangler dev` reads the DEPLOYED
+# secrets and you don't need this file at all.
+
+ANTHROPIC_API_KEY = "sk-ant-..."
+
+# Fine-grained PAT, this repo only, Contents: Read and write.
+# A classic repo-scoped token would grant write access to every repo you own.
+GITHUB_TOKEN = "github_pat_..."
+
+# Whatever you want locally; it does not have to match production.
+ACCESS_PASSWORD = "local-dev-password"
