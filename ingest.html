@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/styles.css?v=6" />
+  <link rel="stylesheet" href="./assets/styles.css?v=7" />
 </head>
 <body>
   <header class="topbar">
@@ -61,15 +61,25 @@
           <input type="date" id="date" class="model" />
         </div>
 
-        <div class="field wide">
-          <label class="field-label" for="link">Source link <span class="muted">optional</span></label>
-          <input type="url" id="link" placeholder="https://miro.com/app/board/…" autocomplete="off" />
-        </div>
       </div>
 
       <div class="field">
         <label class="field-label" for="transcript">Raw material</label>
-        <textarea id="transcript" rows="14" placeholder="Paste the transcript, ticket export, or notes here. Speaker labels and timestamps are fine — they're ignored."></textarea>
+
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="file" accept=".pdf,.txt,.md,.markdown,application/pdf,text/plain,text/markdown" />
+          <span class="dz-icon" aria-hidden="true">⬆</span>
+          <span class="dz-main">Drop a file here, or click to choose</span>
+          <span class="dz-sub">PDF, TXT or MD · PDFs are read directly, scans included</span>
+        </label>
+        <div class="dz-file hidden" id="fileChip">
+          <span class="name" id="fileName"></span>
+          <button type="button" class="btn-link" id="fileClear">remove</button>
+        </div>
+
+        <div class="or-divider"><span>or paste it</span></div>
+
+        <textarea id="transcript" rows="12" placeholder="Paste the transcript, ticket export, or notes here. Speaker labels and timestamps are fine — they're ignored."></textarea>
         <span class="hint" id="sizeHint"></span>
       </div>
 
@@ -97,9 +107,9 @@
     </p>
   </main>
 
-  <script src="./assets/app.js?v=6"></script>
-  <script src="./assets/retrieve.js?v=6"></script>
-  <script src="./assets/themes.js?v=6"></script>
-  <script src="./assets/ingest.js?v=6"></script>
+  <script src="./assets/app.js?v=7"></script>
+  <script src="./assets/retrieve.js?v=7"></script>
+  <script src="./assets/themes.js?v=7"></script>
+  <script src="./assets/ingest.js?v=7"></script>
 </body>
 </html>

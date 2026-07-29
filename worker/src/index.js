@@ -12,9 +12,13 @@
    password buys the ingest and evaluate flows — not a general "run any prompt
    on someone else's key" proxy.
 
-     /api/evaluate   { hypothesis, candidates[], model? }  -> verdict JSON
-     /api/extract    { transcript, meta, model? }          -> { cards[] }
-     /api/cards      { cards[], meta }                     -> commits the CSV
+     /api/evaluate   { hypothesis, candidates[], model? }        -> verdict JSON
+     /api/extract    { meta, model?, transcript | document }     -> { cards[] }
+     /api/cards      { cards[], meta }                           -> commits the CSV
+
+   /api/extract takes either pasted/loaded text or a base64 PDF. The PDF is
+   handed to the model as a native document block, so scans and tables work and
+   the browser needs no PDF parser.
    ========================================================================== */
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
@@ -42,6 +46,11 @@ const COLUMNS = ['Insight', 'Date', 'Description', 'Segment', 'Source', 'Source 
 const EOL = '\r\n';
 
 const MAX_TRANSCRIPT = 400_000;   // chars; the client chunks well before this
+/* Base64 inflates a PDF by ~4/3, and the API caps a request at 32MB — so keep
+   the encoded payload under 24MB, i.e. an 18MB source file. Decimal MB so the
+   figure in the error matches the client's and what the OS reports. Unlike
+   text, a PDF can't be split into passes, so this is a hard stop. */
+const MAX_PDF_B64 = 24_000_000;
 const MAX_CARDS = 60;             // per commit
 const MAX_INSIGHT = 400;          // generous vs the ~140 house style; a hard stop, not the style rule
 const MAX_DESCRIPTION = 1000;
@@ -232,7 +241,7 @@ function fillPrompt(prompt, marker, block) {
 /* ============================================================
    Anthropic call
    ============================================================ */
-async function callAnthropic(env, { model, system, userText, maxTokens, schema }) {
+async function callAnthropic(env, { model, system, userContent, maxTokens, schema }) {
   if (!env.ANTHROPIC_API_KEY) throw fail('ANTHROPIC_API_KEY is not configured on the Worker.', 500);
 
   const res = await fetch(ANTHROPIC_URL, {
@@ -246,7 +255,7 @@ async function callAnthropic(env, { model, system, userText, maxTokens, schema }
       model,
       max_tokens: maxTokens,
       system,
-      messages: [{ role: 'user', content: [{ type: 'text', text: userText }] }],
+      messages: [{ role: 'user', content: userContent }],
       // Classification and extraction both want a stable JSON envelope rather
       // than reasoning tokens competing for the max_tokens budget. See commit
       // 6b76484 — enabling thinking here is what produced unparseable results.
@@ -308,7 +317,7 @@ async function handleEvaluate(body, env, cors) {
   const { text, stopReason, usage } = await callAnthropic(env, {
     model: pickModel(body.model),
     system,
-    userText: hypothesis,
+    userContent: [{ type: 'text', text: hypothesis }],
     maxTokens: 4096,
     schema: EVALUATE_SCHEMA,
   });
@@ -328,30 +337,66 @@ async function handleEvaluate(body, env, cors) {
    /api/extract
    ============================================================ */
 async function handleExtract(body, env, cors) {
-  const transcript = String(body.transcript || '').trim();
-  if (!transcript) throw fail('Paste some raw material first.', 400);
-  if (transcript.length > MAX_TRANSCRIPT) {
-    throw fail(`That material is ${transcript.length.toLocaleString()} characters, over the `
-      + `${MAX_TRANSCRIPT.toLocaleString()} limit. Split it and ingest in sections.`, 413);
-  }
-
   const meta = body.meta || {};
   const source = SOURCES.includes(meta.source) ? meta.source : null;
   if (!source) throw fail(`Source must be one of: ${SOURCES.join(', ')}.`, 400);
   const segment = SEGMENTS.includes(meta.segment) ? meta.segment : 'Unknown';
 
+  const transcript = String(body.transcript || '').trim();
+  const doc = body.document || null;
+
+  if (!transcript && !doc) throw fail('Attach a document or paste some raw material first.', 400);
+
+  if (transcript.length > MAX_TRANSCRIPT) {
+    throw fail(`That material is ${transcript.length.toLocaleString()} characters, over the `
+      + `${MAX_TRANSCRIPT.toLocaleString()} limit. Split it and ingest in sections.`, 413);
+  }
+
+  // Only PDF is accepted as a document. Text files are read in the browser and
+  // arrive as `transcript`; anything else (.docx and friends) is rejected there
+  // with instructions, because parsing it would mean a client-side dependency.
+  if (doc) {
+    if (doc.media_type !== 'application/pdf') {
+      throw fail(`Unsupported document type "${doc.media_type}". Attach a PDF, or a .txt/.md file.`, 415);
+    }
+    const b64len = String(doc.data || '').length;
+    if (!b64len) throw fail('The attached document was empty.', 400);
+    if (b64len > MAX_PDF_B64) {
+      throw fail(`That PDF is about ${(b64len * 3 / 4 / 1e6).toFixed(1)}MB, over the `
+        + `${MAX_PDF_B64 * 3 / 4 / 1e6}MB limit. Split it, or export the text instead.`, 413);
+    }
+  }
+
   // The prompt keys its voice off the Source — first person for Interviews and
   // Usability test, third person for the logged-request sources — so the run
   // metadata has to reach the model even though it never emits those fields.
-  const block = `Source: ${source}\nSegment: ${segment}\nDate: ${meta.date || 'Unknown'}\n\n${transcript}`;
+  const header = `Source: ${source}\nSegment: ${segment}\nDate: ${meta.date || 'Unknown'}`;
+  const block = transcript
+    ? `${header}\n\n${transcript}`
+    : `${header}\n\n(The raw material is attached to the user message as a document.)`;
 
   const prompt = await loadPrompt('extraction-prompt.txt', env);
   const system = fillPrompt(prompt, '=== RAW MATERIAL ===', block);
 
+  // Document block first, then the instruction — the order the API expects.
+  const userContent = [];
+  if (doc) {
+    userContent.push({
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: doc.data },
+    });
+  }
+  userContent.push({
+    type: 'text',
+    text: doc
+      ? 'Extract the insight cards from the attached document.'
+      : 'Extract the insight cards from the raw material.',
+  });
+
   const { text, stopReason, usage } = await callAnthropic(env, {
     model: pickModel(body.model),
     system,
-    userText: 'Extract the insight cards from the raw material.',
+    userContent,
     maxTokens: 8192,
     schema: EXTRACT_SCHEMA,
   });
@@ -361,8 +406,11 @@ async function handleExtract(body, env, cors) {
     // Extraction output scales with the input, unlike the fixed-size
     // classification envelope, so this is the failure that actually happens.
     if (stopReason === 'max_tokens') {
-      throw fail('That material produced more cards than fit in one response. '
-        + 'Ingest it in smaller sections.', 413);
+      throw fail(doc
+        ? 'That document produced more cards than fit in one response. Split the PDF, or '
+          + 'export its text and paste it — text is ingested in several passes automatically.'
+        : 'That material produced more cards than fit in one response. '
+          + 'Ingest it in smaller sections.', 413);
     }
     throw fail('The model returned an unparseable result. Try again, or switch model.', 502);
   }

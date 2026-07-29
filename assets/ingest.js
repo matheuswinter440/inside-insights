@@ -36,16 +36,24 @@ const CHUNK_CHARS = 80_000;
 /* Sources whose cards are written in first person — see extraction-prompt.txt. */
 const FIRST_PERSON_SOURCES = ['Interviews', 'Usability test'];
 
+/* Text files are read here; PDFs go to the Worker as base64 and are passed to
+   the model as a native document, so scans and tables work without bundling a
+   parser into a project that has no dependencies. Anything else is refused with
+   instructions rather than silently producing nothing. */
+const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown'];
+const MAX_PDF_BYTES = 18_000_000;   // ~24MB once base64-encoded. Decimal MB, so the
+                                    // number in the error matches what the OS reports.
+
 const els = {};
 let corpusRows = [];
 let reviewCards = [];
+let attached = null;   // { name, kind: 'text'|'pdf', text? , data? }
 
 document.addEventListener('DOMContentLoaded', async () => {
   els.form = document.getElementById('ingestForm');
   els.source = document.getElementById('source');
   els.segment = document.getElementById('segment');
   els.date = document.getElementById('date');
-  els.link = document.getElementById('link');
   els.transcript = document.getElementById('transcript');
   els.model = document.getElementById('model');
   els.submit = document.getElementById('extractBtn');
@@ -53,11 +61,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   els.review = document.getElementById('review');
   els.voiceHint = document.getElementById('voiceHint');
   els.sizeHint = document.getElementById('sizeHint');
+  els.dropzone = document.getElementById('dropzone');
+  els.file = document.getElementById('file');
+  els.fileChip = document.getElementById('fileChip');
+  els.fileName = document.getElementById('fileName');
+  els.fileClear = document.getElementById('fileClear');
 
   els.date.value = new Date().toISOString().slice(0, 10);
   els.form.addEventListener('submit', onExtract);
   els.source.addEventListener('change', renderVoiceHint);
   els.transcript.addEventListener('input', renderSizeHint);
+  wireDropzone();
   renderVoiceHint();
   renderSizeHint();
 
@@ -71,6 +85,107 @@ document.addEventListener('DOMContentLoaded', async () => {
     showStatus(err.message, 'error');
   }
 });
+
+/* ============================================================
+   File attachment
+   ============================================================ */
+function wireDropzone() {
+  els.file.addEventListener('change', () => {
+    if (els.file.files?.length) acceptFile(els.file.files[0]);
+  });
+
+  // The whole zone is a drop target. dragover must be prevented or the browser
+  // navigates away to the file instead of firing drop.
+  for (const type of ['dragenter', 'dragover']) {
+    els.dropzone.addEventListener(type, (ev) => {
+      ev.preventDefault();
+      els.dropzone.classList.add('over');
+    });
+  }
+  for (const type of ['dragleave', 'drop']) {
+    els.dropzone.addEventListener(type, () => els.dropzone.classList.remove('over'));
+  }
+  els.dropzone.addEventListener('drop', (ev) => {
+    ev.preventDefault();
+    const file = ev.dataTransfer?.files?.[0];
+    if (file) acceptFile(file);
+  });
+
+  els.fileClear.addEventListener('click', clearFile);
+}
+
+async function acceptFile(file) {
+  const name = file.name || 'document';
+  const lower = name.toLowerCase();
+  const isPdf = lower.endsWith('.pdf') || file.type === 'application/pdf';
+  const isText = TEXT_EXTENSIONS.some(e => lower.endsWith(e)) || file.type.startsWith('text/');
+
+  clearStatus();
+
+  if (!isPdf && !isText) {
+    clearFile();
+    showStatus(`Can't read <b>${escapeHtml(name)}</b>. Attach a PDF, or a .txt/.md file — `
+      + 'Word documents need exporting to PDF or text first, and pasting the text works too.', 'error');
+    return;
+  }
+
+  if (isPdf && file.size > MAX_PDF_BYTES) {
+    clearFile();
+    showStatus(`<b>${escapeHtml(name)}</b> is ${(file.size / 1e6).toFixed(1)}MB, over the `
+      + `${MAX_PDF_BYTES / 1e6}MB limit. Split it, or export its text and paste that.`, 'error');
+    return;
+  }
+
+  try {
+    if (isText) {
+      const text = await file.text();
+      if (!text.trim()) throw new Error('the file is empty');
+      attached = { name, kind: 'text', text };
+      // Text goes through the normal paste path, so it also gets multi-pass
+      // chunking for free.
+      els.transcript.value = text;
+      renderSizeHint();
+    } else {
+      attached = { name, kind: 'pdf', data: await fileToBase64(file), size: file.size };
+      els.transcript.value = '';
+      renderSizeHint();
+    }
+  } catch (err) {
+    clearFile();
+    showStatus(`Could not read <b>${escapeHtml(name)}</b>: ${escapeHtml(err.message || String(err))}`, 'error');
+    return;
+  }
+
+  els.fileName.textContent = attached.kind === 'pdf'
+    ? `${name} · ${(file.size / 1e6).toFixed(1)}MB · sent to the model as a PDF`
+    : `${name} · loaded into the box below`;
+  els.fileChip.classList.remove('hidden');
+  els.dropzone.classList.add('has-file');
+}
+
+function clearFile() {
+  attached = null;
+  els.file.value = '';
+  els.fileChip.classList.add('hidden');
+  els.dropzone.classList.remove('has-file');
+  els.fileName.textContent = '';
+}
+
+/* FileReader rather than a manual loop over the bytes: a multi-megabyte PDF
+   built with String.fromCharCode in a loop blows the call stack. */
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('the file could not be read'));
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const comma = result.indexOf(',');
+      if (comma < 0) { reject(new Error('unexpected encoding')); return; }
+      resolve(result.slice(comma + 1));   // strip the `data:...;base64,` prefix
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 function renderVoiceHint() {
   const first = FIRST_PERSON_SOURCES.includes(els.source.value);
@@ -97,7 +212,12 @@ async function onExtract(e) {
   e.preventDefault();
 
   const transcript = els.transcript.value.trim();
-  if (!transcript) { els.transcript.focus(); return; }
+  const pdf = attached?.kind === 'pdf' ? attached : null;
+  if (!transcript && !pdf) {
+    showStatus('Attach a document or paste some raw material first.', 'error');
+    els.transcript.focus();
+    return;
+  }
   if (!els.date.value) { showStatus('Pick a date for this material.', 'error'); return; }
 
   const password = await ensureKey();
@@ -111,7 +231,8 @@ async function onExtract(e) {
     if (!corpusRows.length) corpusRows = await loadCorpusRows();
 
     const meta = currentMeta();
-    const chunks = chunkText(transcript, CHUNK_CHARS);
+    // A PDF can't be split the way text can, so it's always a single pass.
+    const chunks = pdf ? [null] : chunkText(transcript, CHUNK_CHARS);
     const extracted = [];
     let failure = null;
     let done = 0;
@@ -119,13 +240,15 @@ async function onExtract(e) {
     for (let i = 0; i < chunks.length; i++) {
       showStatus(chunks.length > 1
         ? `<span class="spinner"></span>Extracting cards — pass ${i + 1} of ${chunks.length}…`
-        : '<span class="spinner"></span>Extracting cards…');
+        : `<span class="spinner"></span>Reading ${pdf ? escapeHtml(pdf.name) : 'the material'}…`);
 
       try {
         const res = await callWorker('/api/extract', {
           model: els.model.value,
-          transcript: chunks[i],
           meta,
+          ...(pdf
+            ? { document: { media_type: 'application/pdf', data: pdf.data } }
+            : { transcript: chunks[i] }),
         });
         extracted.push(...(res.cards || []));
         done++;
@@ -173,7 +296,10 @@ function currentMeta() {
     source: els.source.value,
     segment: els.segment.value,
     date: els.date.value,
-    link: els.link.value.trim(),
+    // No Source link: the field was replaced by the file attachment. The CSV
+    // column stays (240-odd existing rows carry Miro links) and the Worker still
+    // accepts a link, so it can come back without a schema change.
+    link: '',
   };
 }
 
@@ -455,6 +581,7 @@ async function commit(meta) {
       + (res.commit_url ? ` <a class="lnk" href="${escapeAttr(res.commit_url)}" target="_blank" rel="noopener">view commit ↗</a>` : ''));
 
     els.transcript.value = '';
+    clearFile();
     renderSizeHint();
     reviewCards = [];
     els.review.querySelector('#reviewRows').innerHTML =
