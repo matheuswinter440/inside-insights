@@ -3,7 +3,7 @@
 /* Deployed Worker. It holds the Anthropic key, the GitHub token and the access
    password; none of those ever reach the browser. Point this at
    http://localhost:8787 while running `wrangler dev`. */
-const WORKER_URL = 'https://avrios-evidence-engine.matheuswinter440.workers.dev';
+const WORKER_URL = 'https://avrios-evidence-engine.winterdyck-matheus.workers.dev';
 
 const KEY_STORAGE = 'aee_access_password';
 const FEEDBACK_STORAGE = 'aee_feedback';
