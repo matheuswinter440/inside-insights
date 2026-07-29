@@ -5,29 +5,8 @@
 const TODAY = '2026-07-28';
 const RECENCY_CUTOFF = '2025-07-28'; // ~12 months before TODAY
 
-/* Structured-output schema — forces a role for every candidate + a verdict. */
-const RESULT_SCHEMA = {
-  type: 'object',
-  properties: {
-    verdict: { type: 'string', enum: ['SUPPORTED', 'CONTRADICTED', 'PARTIAL', 'GAP'] },
-    cards: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          index: { type: 'integer' },
-          role: { type: 'string', enum: ['supporting', 'contradicting', 'irrelevant'] },
-        },
-        required: ['index', 'role'],
-        additionalProperties: false,
-      },
-    },
-    recommendation: { type: 'string' },
-    validation_question: { type: 'string' },
-  },
-  required: ['verdict', 'cards', 'recommendation', 'validation_question'],
-  additionalProperties: false,
-};
+/* The structured-output schema lives on the Worker alongside the prompt, so the
+   two can't drift apart. */
 
 let lastResult = null;
 const els = {};
@@ -48,8 +27,8 @@ async function onSubmit(e) {
   const hypothesis = els.hypothesis.value.trim();
   if (!hypothesis) { els.hypothesis.focus(); return; }
 
-  const key = await ensureKey();
-  if (!key) { showStatus('An API key is required to evaluate.', 'error'); return; }
+  const password = await ensureKey();
+  if (!password) { showStatus('The access password is required to evaluate.', 'error'); return; }
 
   setLoading(true);
   els.result.classList.add('hidden');
@@ -72,21 +51,20 @@ async function onSubmit(e) {
 
     showStatus(`<span class="spinner"></span>Retrieved ${total} matching card${total !== 1 ? 's' : ''} deterministically — classifying evidence…`);
 
-    const system = await buildSystemWithCandidates(candidates);
-    const { text } = await callAnthropic({
+    // Send the candidates the app retrieved, in order. The Worker numbers them
+    // 1..N into the prompt exactly as before, so the indices the model returns
+    // still map back to this array by position.
+    const parsed = await callWorker('/api/evaluate', {
       model: els.model.value,
-      system,
-      userContent: [{ type: 'text', text: hypothesis }],
-      maxTokens: 4096,
-      thinking: { type: 'disabled' }, // classification task; keeps the JSON budget intact + reduces variance
-      outputConfig: { format: { type: 'json_schema', schema: RESULT_SCHEMA } },
+      hypothesis,
+      candidates: candidates.map(c => ({
+        insight: c.row.Insight || '',
+        description: c.row.Description || '',
+        source: c.row.Source || '',
+        date: c.row.Date || '',
+        segment: c.row.Segment || '',
+      })),
     });
-
-    const parsed = safeParse(text);
-    if (!parsed) {
-      console.error('Unparseable model output:', text);
-      throw new Error('The model returned an unparseable result. Try again — if it persists, switch model or reload.');
-    }
 
     // Map each labelled index back to the real corpus card (never the model's text).
     const supporting = [], contradicting = [];
@@ -111,15 +89,6 @@ async function onSubmit(e) {
   } finally {
     setLoading(false);
   }
-}
-
-function safeParse(text) {
-  if (!text) return null;
-  let t = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-  try { return JSON.parse(t); } catch {}
-  const m = t.match(/\{[\s\S]*\}/);
-  if (m) { try { return JSON.parse(m[0]); } catch {} }
-  return null;
 }
 
 /* Mechanical strength score from the supporting cards + recency downgrade. */

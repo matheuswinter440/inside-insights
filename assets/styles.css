@@ -109,7 +109,7 @@ h1 {
 }
 .field { display: flex; flex-direction: column; gap: 10px; }
 label.field-label { font-size: 14px; font-weight: 600; color: var(--ink-2); }
-textarea, input[type="text"], input[type="password"], select {
+textarea, input[type="text"], input[type="password"], input[type="url"], input[type="date"], select {
   width: 100%; background: var(--sunken); border: 1px solid var(--border-2);
   border-radius: 10px; color: var(--ink); font-size: 15px; line-height: 1.5;
   padding: 14px 16px; outline: none; resize: vertical;
@@ -312,4 +312,73 @@ select.model {
   .key-status .email { display: none; }
   h1 { font-size: 30px; }
   .wrap { padding: 36px 18px 70px; }
+}
+
+/* ============================================================
+   Add insights (ingest.html)
+   ============================================================ */
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.meta-grid .field.wide { grid-column: 1 / -1; }
+.hint { font-size: 12px; color: var(--ink-4); font-family: var(--font-mono); }
+.field-label .muted { color: var(--ink-4); font-weight: 400; }
+
+/* Review rows -------------------------------------------------- */
+.review-rows { display: flex; flex-direction: column; }
+
+.review-row {
+  display: flex;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--hairline);
+}
+.review-row:first-child { border-top: none; padding-top: 0; }
+.review-row.excluded { opacity: .45; }
+
+.review-check { padding-top: 2px; }
+.review-check input { width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; }
+
+.review-body { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+/* Override the global textarea min-height — these are one-sentence fields. */
+.review-body textarea.review-insight {
+  min-height: 0;
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.review-body .review-desc { padding: 7px 10px; font-size: 13px; }
+
+.review-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.review-meta .theme {
+  font-size: 11.5px; font-family: var(--font-mono); color: var(--teal-light);
+  border: 1px solid var(--v-sup-bd); background: var(--v-sup-bg);
+  border-radius: 5px; padding: 2px 7px;
+}
+
+.flag {
+  font-size: 11.5px; font-family: var(--font-mono);
+  border-radius: 5px; padding: 2px 7px; border: 1px solid;
+}
+.flag.dupe { color: var(--v-con-fg); border-color: var(--v-con-bd); background: var(--v-con-bg); }
+.flag.warn { color: var(--v-par-fg); border-color: var(--v-par-bd); background: var(--v-par-bg); }
+.flag.note { color: var(--ink-4); border-color: var(--border-2); background: var(--sunken); }
+
+/* The existing card a flag refers to, shown inline so the call is judgeable
+   without leaving the page. */
+.review-match {
+  display: flex; flex-direction: column; gap: 3px;
+  border-left: 2px solid var(--border-2);
+  padding: 6px 0 6px 10px;
+}
+.review-match .m { font-size: 11.5px; color: var(--ink-4); font-family: var(--font-mono); }
+.review-match .t { font-size: 13px; color: var(--ink-3); line-height: 1.5; }
+
+@media (max-width: 640px) {
+  .meta-grid { grid-template-columns: 1fr; }
 }

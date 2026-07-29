@@ -1,33 +1,10 @@
-/* Avrios Evidence Engine — Opportunity map: keyword clustering + packed-bubble chart */
-
-/* Keyword theme rules, first match wins — ported verbatim from the build spec. */
-const THEME_RULES = [
-  ['Compliance & licence checks', /DLC|licen|UVV|Halterhaftung|TÜV|compliance|BKrFQG|Pickerl|inspection|Contrôle/i],
-  ['Fines management',            /fine|penalt|authorit|bounce/i],
-  ['Procurement & lifecycle',     /procure|replacement|Not Ordered|quote|offer amount|purchase agreement|order status|decommission|financing|depreciation/i],
-  ['Reporting & analytics',       /report|dashboard|consumption|TCO|benchmark|export|utilization|anomal|analy/i],
-  ['Automation & AI trust',       /\bAI\b|automat|auto-|revert|approv|trust|escalat|LLM|OCR|readout/i],
-  ['Documents & mailroom',        /post office|mailroom|Poststelle|document|folder|smime|scan|attachment/i],
-  ['Vehicle checks & checklists', /checklist|vehicle check|check item/i],
-  ['Handover & pool vehicles',    /handover|return|pool|booking/i],
-  ['Invoices & finance',          /invoice|leasing|lease|fringe benefit|tax|cost cent|budget|insurance|installment|premium/i],
-  ['User rights & permissions',   /user right|permission|role|access|sub-org/i],
-  ['Driver app & comms',          /driver app|WhatsApp|notification|reminder|email address|PIN-user|username|SMS|messag/i],
-  ['Tasks & workflow',            /task|template|workshop|scheduled date|recurring/i],
-  ['Data & master data',          /master data|odometer|mileage|custom field|column|filter|registration paper/i],
-];
-const OTHER = 'Other';
+/* Avrios Evidence Engine — Opportunity map: keyword clustering + packed-bubble chart
+   THEME_RULES / classify() live in themes.js, shared with the ingest page. */
 
 /* Source-density colors (distinct source types) — hardcoded hex from the design. */
 const DENSITY = { 1: '#f5a623', 2: '#5eead4', 3: '#14b8a6', 4: '#0e9488' };
 const CANVAS_W = 744;
 const CANVAS_H = 640;
-
-function classify(row) {
-  const hay = `${row.Insight || ''} ${row.Description || ''}`;
-  for (const [name, re] of THEME_RULES) if (re.test(hay)) return name;
-  return OTHER;
-}
 
 const state = { rows: [], themes: [], selected: null };
 
