@@ -50,3 +50,4 @@ preamble. Fields:
 - validation_question: the specific question to test if GAP or weak; otherwise ""
 
 === CANDIDATE CARDS ===
+{the app appends the deterministically-retrieved candidate cards here at runtime}
