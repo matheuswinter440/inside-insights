@@ -334,24 +334,36 @@ function renderRow(c) {
   for (const w of c.warnings) flags.push(`<span class="flag note">${escapeHtml(w)}</span>`);
 
   const match = c.exactMatch || c.similar?.row;
+  // Context starts hidden unless the model actually supplied some — roughly one
+  // card in seven — so the common case is one clean field per card.
+  const hasContext = !!c.description;
 
   return `
-    <div class="review-row${c.include ? '' : ' excluded'}" data-id="${c.id}">
-      <label class="review-check">
-        <input type="checkbox" data-role="include" ${c.include ? 'checked' : ''} />
-      </label>
-      <div class="review-body">
-        <textarea class="review-insight" data-role="insight" rows="2">${escapeHtml(c.insight)}</textarea>
-        <input class="review-desc" data-role="description" placeholder="optional context…" value="${escapeAttr(c.description)}" />
-        <div class="review-meta">
-          <span class="theme">${escapeHtml(c.theme)}</span>
-          ${flags.join('')}
-        </div>
-        ${match ? `<div class="review-match">
-          <span class="m">existing · ${escapeHtml(match.Source || '—')} · ${escapeHtml(match.Date || '—')}</span>
-          <span class="t">${escapeHtml(match.Insight || '')}</span>
-        </div>` : ''}
+    <div class="review-card${c.include ? '' : ' excluded'}" data-id="${c.id}">
+      <div class="review-card-head">
+        <label class="review-check">
+          <input type="checkbox" data-role="include" ${c.include ? 'checked' : ''} />
+        </label>
+        <span class="theme">${escapeHtml(c.theme)}</span>
+        ${flags.join('')}
       </div>
+
+      <textarea class="review-insight" data-role="insight" rows="2">${escapeHtml(c.insight)}</textarea>
+
+      <div class="review-context${hasContext ? '' : ' hidden'}" data-part="context">
+        <input type="text" class="review-desc" data-role="description"
+               placeholder="Extra context — a qualifying detail, a specific list, the reason behind the need"
+               value="${escapeAttr(c.description)}" />
+      </div>
+      <div class="review-card-foot">
+        <button type="button" class="btn-link add-context${hasContext ? ' hidden' : ''}"
+                data-role="add-context">+ Add context</button>
+      </div>
+
+      ${match ? `<div class="review-match">
+        <span class="m">existing · ${escapeHtml(match.Source || '—')} · ${escapeHtml(match.Date || '—')}</span>
+        <span class="t">${escapeHtml(match.Insight || '')}</span>
+      </div>` : ''}
     </div>`;
 }
 
@@ -365,8 +377,19 @@ function wireReview(meta) {
     els.review.querySelector('#commitBtn').disabled = n === 0;
   };
 
+  // Reveal the context field on demand. Click, not input, so it's a separate
+  // listener from the field edits below.
+  rows.addEventListener('click', (ev) => {
+    if (ev.target.dataset.role !== 'add-context') return;
+    const cardEl = ev.target.closest('.review-card');
+    if (!cardEl) return;
+    cardEl.querySelector('[data-part="context"]').classList.remove('hidden');
+    ev.target.classList.add('hidden');
+    cardEl.querySelector('[data-role="description"]').focus();
+  });
+
   rows.addEventListener('input', (ev) => {
-    const rowEl = ev.target.closest('.review-row');
+    const rowEl = ev.target.closest('.review-card');
     if (!rowEl) return;
     const card = reviewCards.find(c => c.id === rowEl.dataset.id);
     if (!card) return;

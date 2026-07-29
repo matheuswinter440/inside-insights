@@ -82,8 +82,9 @@ textarea, select, button, input { font-family: inherit; }
 }
 .nav a:hover { background: var(--hairline); color: var(--ink); }
 .nav a.active { background: var(--hairline); color: #f2f4f6; }
+.nav.nav-end { margin-left: auto; }
 .key-status {
-  margin-left: auto; display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 12px;
   font-size: 13px; color: var(--ink-4);
 }
 .key-status code { font-family: var(--font-mono); }
@@ -327,39 +328,60 @@ select.model {
 .hint { font-size: 12px; color: var(--ink-4); font-family: var(--font-mono); }
 .field-label .muted { color: var(--ink-4); font-weight: 400; }
 
-/* Review rows -------------------------------------------------- */
-.review-rows { display: flex; flex-direction: column; }
+/* Review cards ------------------------------------------------ */
+.review-rows { display: flex; flex-direction: column; gap: 12px; }
 
-.review-row {
+.review-card {
+  background: var(--sunken);
+  border: 1px solid var(--border-2);
+  border-radius: 12px;
+  padding: 14px 16px 12px;
   display: flex;
-  gap: 12px;
-  padding: 14px 0;
-  border-top: 1px solid var(--hairline);
+  flex-direction: column;
+  gap: 10px;
+  transition: opacity .12s, border-color .12s;
 }
-.review-row:first-child { border-top: none; padding-top: 0; }
-.review-row.excluded { opacity: .45; }
+.review-card.excluded { opacity: .45; }
+.review-card:focus-within { border-color: var(--brand); }
 
-.review-check { padding-top: 2px; }
-.review-check input { width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; }
-
-.review-body { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-
-/* Override the global textarea min-height — these are one-sentence fields. */
-.review-body textarea.review-insight {
-  min-height: 0;
-  padding: 8px 10px;
-  font-size: 14px;
-  line-height: 1.5;
-  resize: vertical;
+/* Checkbox and labels share the top line, so the tag reads as part of the card
+   rather than floating under it. */
+.review-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.review-check { display: flex; align-items: center; }
+.review-check input {
+  width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; margin: 0;
 }
-.review-body .review-desc { padding: 7px 10px; font-size: 13px; }
 
-.review-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.review-meta .theme {
+.review-card .theme {
   font-size: 11.5px; font-family: var(--font-mono); color: var(--teal-light);
   border: 1px solid var(--v-sup-bd); background: var(--v-sup-bg);
-  border-radius: 5px; padding: 2px 7px;
+  border-radius: 5px; padding: 2px 7px; white-space: nowrap;
 }
+
+/* Override the global textarea min-height — these are one-sentence fields. */
+.review-card textarea.review-insight {
+  min-height: 0;
+  padding: 10px 12px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  resize: vertical;
+  background: var(--panel);
+  border-color: var(--hairline);
+}
+.review-card .review-desc {
+  padding: 9px 12px; font-size: 13px;
+  background: var(--panel); border-color: var(--hairline);
+}
+
+/* Wrapper exists so the field can be revealed as a unit; .hidden does the work. */
+.review-context { display: block; }
+
+.review-card-foot { display: flex; }
+.btn-link.add-context {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--link); font-size: 12.5px; font-family: inherit;
+}
+.btn-link.add-context:hover { color: var(--link-hover); }
 
 .flag {
   font-size: 11.5px; font-family: var(--font-mono);
@@ -367,14 +389,14 @@ select.model {
 }
 .flag.dupe { color: var(--v-con-fg); border-color: var(--v-con-bd); background: var(--v-con-bg); }
 .flag.warn { color: var(--v-par-fg); border-color: var(--v-par-bd); background: var(--v-par-bg); }
-.flag.note { color: var(--ink-4); border-color: var(--border-2); background: var(--sunken); }
+.flag.note { color: var(--ink-4); border-color: var(--border-2); background: var(--bg); }
 
 /* The existing card a flag refers to, shown inline so the call is judgeable
    without leaving the page. */
 .review-match {
   display: flex; flex-direction: column; gap: 3px;
   border-left: 2px solid var(--border-2);
-  padding: 6px 0 6px 10px;
+  padding: 2px 0 2px 10px;
 }
 .review-match .m { font-size: 11.5px; color: var(--ink-4); font-family: var(--font-mono); }
 .review-match .t { font-size: 13px; color: var(--ink-3); line-height: 1.5; }
