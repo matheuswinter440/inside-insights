@@ -1,0 +1,19 @@
+name = "avrios-evidence-engine"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+
+# Non-secret configuration. Secrets are NOT set here — see README.md.
+[vars]
+# Origins allowed to call the Worker, comma-separated. Reflected one-for-one
+# rather than '*', so another host can't drive the endpoints using a browser's
+# stored password. Include the localhost origin you serve the site from locally.
+ALLOWED_ORIGINS = "https://matheuswinter440.github.io,http://localhost:8000"
+
+# Where the Worker fetches data/system-prompt.txt and data/extraction-prompt.txt.
+# Keeping the prompts on the site means /data stays the single source of truth —
+# edit a file, commit, and both routes pick it up.
+SITE_BASE_URL = "https://matheuswinter440.github.io/inside-insights"
+
+# Repo the corpus is committed to, and the branch Pages serves.
+GITHUB_REPO = "matheuswinter440/inside-insights"
+GITHUB_BRANCH = "main"

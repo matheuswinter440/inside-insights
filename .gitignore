@@ -2,3 +2,8 @@
 env.rtf
 *.key
 .env
+
+# Worker secrets for `wrangler dev` — never commit these
+worker/.dev.vars
+node_modules/
+.wrangler/
